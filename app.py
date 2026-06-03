@@ -17,19 +17,17 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 3. GÖRSEL TASARIM (CSS) - BEYAZ ARKA PLAN & SİYAH YAZILAR & TURKUAZ BUTONLAR
+# 3. GÖRSEL TASARIM (CSS)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
     
-    /* Arka plan bembeyaz, ana yazılar siyah */
     .stApp { 
         background-color: #ffffff !important;
         font-family: 'Inter', sans-serif; 
         color: #000000 !important; 
     }
     
-    /* Tüm başlıklar siyah ve şık font */
     h1, h2, h3, h4, h5, h6, p, span, div { 
         font-family: 'Inter', sans-serif;
         color: #000000 !important; 
@@ -38,7 +36,6 @@ st.markdown("""
         font-family: 'Playfair Display', serif !important;
     }
     
-    /* Kart tasarımları (Hafif gri tonlu/gölgeli beyaz kutular) */
     .quote-card, .timeline-card, .note-card {
         background-color: #fcfcfc !important;
         border-radius: 20px; 
@@ -48,7 +45,6 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04); 
     }
     
-    /* İNPUT (METİN GİRİŞ) KUTULARI - Beyaz arka plan, siyah yazı */
     div[data-baseweb="input"] > div, 
     div[data-baseweb="base-input"],
     div[data-baseweb="textarea"] > div {
@@ -62,11 +58,10 @@ st.markdown("""
         color: #000000 !important; 
     }
 
-    /* BUTONLAR - Yeşil/Mavi/Turkuaz Karışımı */
     div[data-testid="stButton"] > button, 
     div[data-testid="stFormSubmitButton"] > button {
-        background: linear-gradient(135deg, #06beb6 0%, #48b1bf 100%) !important; /* Turkuaz/Mavi geçiş */
-        color: #ffffff !important; /* Buton içi yazı beyaz kalsın ki okunsun */
+        background: linear-gradient(135deg, #06beb6 0%, #48b1bf 100%) !important; 
+        color: #ffffff !important; 
         border: none !important;
         border-radius: 15px !important;
         padding: 10px 25px !important;
@@ -75,14 +70,12 @@ st.markdown("""
         transition: all 0.3s ease !important;
     }
     
-    /* Butonun üzerine gelince büyüme efekti */
     div[data-testid="stButton"] > button:hover, 
     div[data-testid="stFormSubmitButton"] > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 15px rgba(6, 190, 182, 0.5) !important;
     }
     
-    /* Sekme (Tab) yazılarının siyah olması */
     button[data-baseweb="tab"] {
         color: #000000 !important;
     }
@@ -117,7 +110,6 @@ st.title("🤍 İlayda & Berkhan")
 
 # 5. GÜNÜN SÖZÜ
 try:
-    # HATA BURADA ÇÖZÜLDÜ: descending=True yerine desc=True kullanıldı.
     last_note = supabase.table("ani_kavanozu").select("*").order("created_at", desc=True).limit(1).execute()
     if last_note.data:
         note = last_note.data[0]
@@ -132,10 +124,9 @@ except:
 
 tab1, tab2, tab3 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle"])
 
-# TAB 1: ZAMAN TÜNELİ
+# TAB 1: ZAMAN TÜNELİ (LİSTELEME)
 with tab1:
     try:
-        # HATA BURADA ÇÖZÜLDÜ: desc=True
         memories = supabase.table("zaman_tuneli").select("*").order("tarih", desc=True).execute()
         for m in memories.data:
             col_text, col_img = st.columns([2, 1])
@@ -148,8 +139,9 @@ with tab1:
                     </div>
                 """, unsafe_allow_html=True)
             with col_img:
-                if m.get('resim_url'):
-                    st.image(m['resim_url'], use_container_width=True)
+                # BURASI DÜZELTİLDİ: gorsel_linki yapıldı
+                if m.get('gorsel_linki'):
+                    st.image(m['gorsel_linki'], use_container_width=True)
     except Exception as e:
         st.error("Anılar yüklenirken bir sorun oluştu.")
 
@@ -160,18 +152,23 @@ with tab2:
         mesaj = st.text_area("", placeholder="İçinden geçenleri yaz...")
         if st.button("Kavanoza Bırak"):
             if mesaj:
-                supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
-                st.rerun()
+                try:
+                    supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error("Not eklenirken veritabanı hatası oluştu.")
 
     st.write("")
-    # HATA BURADA ÇÖZÜLDÜ: desc=True
-    all_notes = supabase.table("ani_kavanozu").select("*").order("created_at", desc=True).execute()
-    for n in all_notes.data:
-        st.markdown(f"""
-            <div class='note-card'>
-                <strong>{n['yazar']}:</strong> <span>{n['metin']}</span>
-            </div>
-        """, unsafe_allow_html=True)
+    try:
+        all_notes = supabase.table("ani_kavanozu").select("*").order("created_at", desc=True).execute()
+        for n in all_notes.data:
+            st.markdown(f"""
+                <div class='note-card'>
+                    <strong>{n['yazar']}:</strong> <span>{n['metin']}</span>
+                </div>
+            """, unsafe_allow_html=True)
+    except Exception as e:
+        st.warning("Notlar şu an listelenemiyor.")
 
 # TAB 3: YENİ ANI EKLE
 with tab3:
@@ -190,13 +187,17 @@ with tab3:
                     with st.spinner("Fotoğraf Yükleniyor..."):
                         resim_url = upload_image(yuklenen_resim)
                 
-                supabase.table("zaman_tuneli").insert({
-                    "tarih": str(tarih),
-                    "baslik": baslik,
-                    "detay": detay,
-                    "resim_url": resim_url
-                }).execute()
-                st.success("Anı başarıyla kaydedildi! ✨")
-                st.rerun()
+                try:
+                    # BURASI DÜZELTİLDİ: gorsel_linki olarak kaydediyor
+                    supabase.table("zaman_tuneli").insert({
+                        "tarih": str(tarih),
+                        "baslik": baslik,
+                        "detay": detay,
+                        "gorsel_linki": resim_url
+                    }).execute()
+                    st.success("Anı başarıyla kaydedildi! ✨")
+                    st.rerun()
+                except Exception as e:
+                    st.error("Veritabanına kaydedilirken bir hata oluştu.")
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
