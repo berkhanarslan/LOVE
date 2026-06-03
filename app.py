@@ -95,7 +95,7 @@ if not st.session_state['authenticated']:
     with col2:
         password = st.text_input("", type="password", placeholder="Şifre")
         if st.button("Giriş"):
-            if password == "1608":
+            if password == "2306":
                 st.session_state['authenticated'] = True
                 st.rerun()
     st.stop()
