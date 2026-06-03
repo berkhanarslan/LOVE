@@ -3,10 +3,10 @@ import datetime
 from supabase import create_client, Client
 import uuid
 
-# 1. SAYFA YAPILANDIRMASI
+# 1. SAYFA YAPILANDIRMASI (Beyaz kalp eklendi)
 st.set_page_config(
     page_title="İlayda & Berkhan | Bizim Alanımız",
-    page_icon="🌿",
+    page_icon="🤍",
     layout="wide"
 )
 
@@ -17,7 +17,7 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# 3. GÖRSEL TASARIM (CSS) - YENİ NESİL ŞEFFAF TASARIM
+# 3. GÖRSEL TASARIM (CSS) - KESİN BEYAZ ÇÖZÜM
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
@@ -26,42 +26,71 @@ st.markdown("""
     .stApp { 
         background: linear-gradient(135deg, #e0f2f1 0%, #e1f5fe 100%);
         font-family: 'Inter', sans-serif; 
-        color: #1c313a; /* Siyah yerine koyu lacivert/gri tonu */
+        color: #1c313a; 
     }
     
     /* Başlık Renkleri */
     h1, h2, h3, h4 { 
         font-family: 'Playfair Display', serif; 
-        color: #004d40; /* Koyu orman yeşili */
+        color: #004d40; 
     }
     
-    /* Şeffaf Beyaz ve Yuvarlak Köşeli Kutular (Glassmorphism) */
+    /* Şeffaf Beyaz Kutular */
     .quote-card, .timeline-card, .note-card {
-        background: rgba(255, 255, 255, 0.6); /* Yarı şeffaf beyaz */
-        backdrop-filter: blur(10px); /* Arka planı hafif flulaştırır */
-        -webkit-backdrop-filter: blur(10px);
-        border-radius: 20px; /* Yumuşak, yuvarlak köşeler */
+        background: rgba(255, 255, 255, 0.7) !important;
+        backdrop-filter: blur(10px); 
+        border-radius: 20px; 
         padding: 20px;
         margin-bottom: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.8);
-        box-shadow: 0 8px 32px 0 rgba(0, 77, 64, 0.05); /* Çok hafif yeşilimsi gölge */
+        border: 1px solid rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 77, 64, 0.05); 
     }
     
-    /* Streamlit'in kendi input (girdi) alanlarını da yuvarlak yapalım */
-    div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > div {
+    /* İNPUT (METİN GİRİŞ) KUTULARINI KESİN BEYAZ YAPMA */
+    div[data-baseweb="input"] > div, 
+    div[data-baseweb="base-input"],
+    div[data-baseweb="textarea"] > div {
+        background-color: #ffffff !important; /* Arka plan bembeyaz */
         border-radius: 15px !important;
-        background-color: rgba(255, 255, 255, 0.7) !important;
-        border: 1px solid rgba(0, 150, 136, 0.3) !important;
+        border: 1px solid rgba(0, 77, 64, 0.2) !important; /* Çok hafif yeşil sınır çizgisi */
+    }
+    
+    /* Siyah kalan göz ikonu veya dış çerçeveyi temizleme */
+    div[data-baseweb="input"] {
+        background-color: transparent !important;
+    }
+    
+    /* Input içindeki yazı rengi */
+    input, textarea {
+        background-color: transparent !important;
+        color: #004d40 !important; 
+    }
+
+    /* BUTONLARI KESİN BEYAZ YAPMA */
+    div[data-testid="stButton"] > button, 
+    div[data-testid="stFormSubmitButton"] > button {
+        background-color: #ffffff !important;
+        color: #004d40 !important;
+        border: 1px solid rgba(0, 77, 64, 0.2) !important;
+        border-radius: 15px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
+    }
+    
+    /* Butonun üzerine gelinceki efekti */
+    div[data-testid="stButton"] > button:hover, 
+    div[data-testid="stFormSubmitButton"] > button:hover {
+        border-color: #004d40 !important;
+        background-color: #f8fbfb !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 4. ŞİFRE KORUMASI
+# 4. ŞİFRE KORUMASI (Beyaz kalp ile)
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
 if not st.session_state['authenticated']:
-    st.markdown("<h1 style='text-align:center; color:#00695c;'>🌿 Bizim Alanımız</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#00695c;'>🤍 Bizim Alanımız</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         password = st.text_input("", type="password", placeholder="Şifre")
@@ -80,7 +109,7 @@ def upload_image(file):
     return supabase.storage.from_("media").get_public_url(storage_path)
 
 # --- ANA İÇERİK ---
-st.title("🌿 İlayda & Berkhan")
+st.title("🤍 İlayda & Berkhan")
 
 # 5. GÜNÜN SÖZÜ
 try:
@@ -94,7 +123,7 @@ try:
             </div>
         """, unsafe_allow_html=True)
 except:
-    pass # Hata verirse veya boşsa ekranda kalabalık yapmasın, sessizce geçsin
+    pass 
 
 tab1, tab2, tab3 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle"])
 
@@ -128,7 +157,7 @@ with tab2:
                 supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
                 st.rerun()
 
-    st.write("") # Boşluk
+    st.write("")
     all_notes = supabase.table("ani_kavanozu").select("*").order("created_at", descending=True).execute()
     for n in all_notes.data:
         st.markdown(f"""
