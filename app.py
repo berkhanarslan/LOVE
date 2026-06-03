@@ -1,185 +1,172 @@
 import streamlit as st
+import datetime
 from supabase import create_client, Client
+import uuid
 
 # 1. SAYFA YAPILANDIRMASI
 st.set_page_config(
     page_title="İlayda & Berkhan | Bizim Alanımız",
-    page_icon="✨",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_icon="❤️",
+    layout="wide"
 )
 
 # 2. SUPABASE BAĞLANTISI
 @st.cache_resource
 def init_connection():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        return None
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-supabase = init_connection()
+supabase: Client = init_connection()
 
-# 3. GÖRSEL TASARIM (Beyaz Kutular, Siyah Yazılar, Belirgin Etiketler)
+# 3. GÖRSEL TASARIM (CSS)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
     
     .stApp { background-color: #FAF9F6; font-family: 'Inter', sans-serif; color: #2A2A2A; }
-    h1, h2, h3, h4 { font-family: 'Playfair Display', serif; font-weight: 700; color: #1A1A1A; }
-    .hero-title { text-align: center; font-size: 3.5rem; margin-top: 2rem; margin-bottom: 0.5rem; }
+    h1, h2, h3, h4 { font-family: 'Playfair Display', serif; color: #1A1A1A; }
     
-    /* GİRİŞ KUTULARI VE ETİKET TASARIMLARI */
-    
-    /* Üstteki Başlıkların (Tarih, Başlık vb.) Simsiyah ve Görünür Olması */
-    label, p.st-emotion-cache-1wivap2 {
-        color: #000000 !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
+    .quote-card {
+        background: linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%);
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        border: 1px solid #d4af37;
+        margin-bottom: 30px;
     }
-
-    /* Kutucukların Bembeyaz Olması ve Gri Çerçeve */
-    div[data-baseweb="input"] > div, 
-    div[data-baseweb="textarea"] > textarea, 
-    div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important; 
-        border-radius: 6px !important; /* Hafif yuvarlak klasik köşe */
-        border: 1px solid #A0A0A0 !important; 
+    .timeline-card {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+        border-left: 5px solid #D4AF37;
     }
-    
-    /* İçine Yazılan Yazıların Simsiyah Olması */
-    input, textarea, .stSelectbox span {
-        color: #000000 !important;
+    .note-card {
+        background-color: #F3F1EB;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        border: 1px dashed #D4AF37;
     }
-    
-    /* Buton Tasarımı */
-    .stButton>button, .stFormSubmitButton>button {
-        border-radius: 6px !important;
-        background-color: #D4AF37 !important;
-        color: #000000 !important;
-        font-weight: bold !important;
-        border: none !important;
-    }
-    
-    .timeline-card { background-color: #FFFFFF; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 4px solid #D4AF37; }
-    .timeline-date { font-family: 'Playfair Display', serif; font-size: 1.2rem; color: #D4AF37; font-weight: bold; }
-    .note-card { background-color: #F3F1EB; padding: 15px 20px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #2A2A2A; }
     </style>
 """, unsafe_allow_html=True)
 
-# Veritabanı Uyarı Mesajı
-if supabase is None:
-    st.error("⚠️ Veritabanı bağlantısı şu an aktif değil. Aşağıdaki adımları uygulayarak terminal klasörünü düzelt.")
-
-# 4. ŞİFRE KORUMASI (Şifre: 2306)
+# 4. ŞİFRE KORUMASI
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
 if not st.session_state['authenticated']:
-    st.markdown("<h1 class='hero-title'>Bizim Alanımız</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>🔐 Bizim Alanımız</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         password = st.text_input("Giriş Şifresi", type="password")
         if st.button("Giriş Yap"):
-            if password == "2306":
+            if password == "1608":
                 st.session_state['authenticated'] = True
                 st.rerun()
-            else:
-                st.error("Hatalı şifre.")
     st.stop()
 
-# 5. ANA SAYFA VE İÇERİKLER
-st.markdown("<h1 class='hero-title'>İlayda & Berkhan</h1>", unsafe_allow_html=True)
-st.write("---")
+# --- YARDIMCI FONKSİYONLAR ---
+def upload_image(file):
+    """Resmi Supabase Storage'a yükler ve URL döner."""
+    file_extension = file.name.split(".")[-1]
+    file_name = f"{uuid.uuid4()}.{file_extension}"
+    # 'media' bucket'ına yükle
+    storage_path = f"photos/{file_name}"
+    res = supabase.storage.from_("media").upload(storage_path, file.getvalue())
+    # Public URL'yi al
+    return supabase.storage.from_("media").get_public_url(storage_path)
 
-left_col, right_col = st.columns([2, 1], gap="large")
+# --- ANA İÇERİK ---
+st.title("❤️ İlayda & Berkhan")
 
-with left_col:
-    st.markdown("### ⏳ Zaman Tüneli")
-    
-    if supabase is not None:
-        try:
-            response_timeline = supabase.table("zaman_tuneli").select("*").order("id", descending=False).execute()
-            anilar = response_timeline.data
-            
-            if not anilar:
-                st.info("Zaman tüneli şu an boş. Sayfanın en altındaki panelden yeni bir anı ekleyebilirsin.")
-            
-            for ani in anilar:
+# 5. GÜNÜN SÖZÜ (En son eklenen sevgi notu)
+st.markdown("### 🖋️ Günün Kalbinden")
+try:
+    last_note = supabase.table("ani_kavanozu").select("*").order("created_at", descending=True).limit(1).execute()
+    if last_note.data:
+        note = last_note.data[0]
+        st.markdown(f"""
+            <div class='quote-card'>
+                <h2 style='font-style: italic;'>"{note['metin']}"</h2>
+                <p style='text-align: right; color: #707070;'>— {note['yazar']}</p>
+            </div>
+        """, unsafe_allow_html=True)
+except:
+    st.write("Henüz bir söz bırakılmamış...")
+
+tab1, tab2, tab3 = st.tabs(["⏳ Zaman Tünelimiz", "🍯 Anı Kavanozu", "📸 Yeni Anı Ekle"])
+
+# TAB 1: ZAMAN TÜNELİ (LİSTELEME)
+with tab1:
+    st.markdown("### ⏳ Birlikte Geçen Günler")
+    try:
+        memories = supabase.table("zaman_tuneli").select("*").order("tarih", descending=True).execute()
+        for m in memories.data:
+            col_text, col_img = st.columns([2, 1])
+            with col_text:
                 st.markdown(f"""
                     <div class='timeline-card'>
-                        <span class='timeline-date'>{ani['tarih']}</span>
-                        <h4>{ani['baslik']}</h4>
-                        <p>{ani['detay']}</p>
+                        <p style='color:#D4AF37; font-weight:bold;'>{m['tarih']}</p>
+                        <h4>{m['baslik']}</h4>
+                        <p>{m['detay']}</p>
                     </div>
                 """, unsafe_allow_html=True)
-                
-                if ani['gorsel_linki']:
-                    if ani['gorsel_linki'].endswith(('.mp4', '.mov')):
-                        st.video(ani['gorsel_linki'])
-                    else:
-                        st.image(ani['gorsel_linki'], width='stretch')
-                st.write("")
-        except Exception as e:
-            st.error("Zaman tüneli tablosu bulunamadı. Supabase'i kontrol et.")
-    else:
-        st.warning("Veritabanı bağlı olmadığı için anılar yüklenemiyor.")
+            with col_img:
+                if m.get('resim_url'):
+                    st.image(m['resim_url'], use_container_width=True)
+            st.write("---")
+    except Exception as e:
+        st.error("Anılar yüklenirken bir hata oluştu.")
 
-with right_col:
-    st.markdown("### 🎵 Fon Müziğimiz")
-    st.info("Müzik çalar buraya eklenecek.")
-    st.write("---")
+# TAB 2: ANI KAVANOZU
+with tab2:
+    st.markdown("### 🍯 Sevgi Kavanozu")
     
-    st.markdown("### ✍️ Anı Kavanozu")
-    yazar = st.selectbox("Yazan Seçimi", ["Berkhan", "İlayda"])
-    yeni_not = st.text_area("Mesajını Buraya Yaz", max_chars=500)
-    
-    if st.button("Kavanoza At"):
-        if supabase is None:
-            st.error("Veritabanı bağlı değil.")
-        elif yeni_not.strip() != "":
-            try:
-                supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": yeni_not.strip()}).execute()
+    with st.expander("✨ Yeni Not Bırak"):
+        yazar = st.radio("Kimden?", ["İlayda", "Berkhan"], horizontal=True)
+        mesaj = st.text_area("Mesajın...")
+        if st.button("Kavanoza Gönder"):
+            if mesaj:
+                supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
+                st.success("Notun kalbe ulaştı! ❤️")
                 st.rerun()
-            except Exception as e:
-                st.error("Not kaydedilemedi.")
+
+    st.write("#### 📜 Geçmiş Notlar")
+    all_notes = supabase.table("ani_kavanozu").select("*").order("created_at", descending=True).execute()
+    for n in all_notes.data:
+        st.markdown(f"""
+            <div class='note-card'>
+                <strong>{n['yazar']}:</strong> {n['metin']} <br>
+                <small style='color:gray;'>{n['created_at'][:10]}</small>
+            </div>
+        """, unsafe_allow_html=True)
+
+# TAB 3: YENİ ANI EKLE (RESİMLİ)
+with tab3:
+    st.markdown("### 📸 Yeni Bir Anı Kaydet")
+    with st.form("yeni_ani_formu", clear_on_submit=True):
+        tarih = st.date_input("Ne zamandı?", datetime.date.today())
+        baslik = st.text_input("Anının Başlığı", placeholder="Örn: İlk Akşam Yemeği")
+        detay = st.text_area("Neler oldu?", placeholder="O günü kısaca anlat...")
+        yuklenen_resim = st.file_uploader("O günden bir kare seç", type=["jpg", "png", "jpeg"])
+        
+        submit = st.form_submit_button("Anıyı Ölümsüzleştir ✨")
+        
+        if submit:
+            if baslik and detay:
+                resim_url = ""
+                if yuklenen_resim:
+                    with st.spinner("Resim yükleniyor..."):
+                        resim_url = upload_image(yuklenen_resim)
                 
-    st.write("")
-    if supabase is not None:
-        try:
-            response_notes = supabase.table("ani_kavanozu").select("*").order("created_at", descending=True).execute()
-            for n in response_notes.data:
-                st.markdown(f"<div class='note-card'><strong>{n['yazar']}:</strong> \"{n['metin']}\"</div>", unsafe_allow_html=True)
-        except:
-            pass
-
-st.write("---")
-
-# 6. İÇERİK EKLEME PANELİ
-st.markdown("### ⚙️ Site Yönetim Paneli (Yeni Anı Ekle)")
-
-with st.form("yeni_ani_formu", clear_on_submit=True):
-    yeni_tarih = st.text_input("Tarih (Örn: 16 Ağustos 2024)")
-    yeni_baslik = st.text_input("Başlık (Örn: İlk Buluşma)")
-    yeni_detay = st.text_area("Anının Detayları...")
-    yeni_gorsel = st.text_input("Fotoğraf veya Video Linki (Varsa URL yapıştır)")
-    
-    kaydet_butonu = st.form_submit_button("Sisteme Kaydet ve Siteyi Güncelle")
-    
-    if kaydet_butonu:
-        if supabase is None:
-            st.error("⚠️ Veritabanı bağlantısı yok! Kayıt yapılamaz.")
-        elif yeni_tarih and yeni_baslik and yeni_detay:
-            try:
                 supabase.table("zaman_tuneli").insert({
-                    "tarih": yeni_tarih,
-                    "baslik": yeni_baslik,
-                    "detay": yeni_detay,
-                    "gorsel_linki": yeni_gorsel
+                    "tarih": str(tarih),
+                    "baslik": baslik,
+                    "detay": detay,
+                    "resim_url": resim_url
                 }).execute()
-                st.success("Anı başarıyla eklendi! Görmek için F5 yapabilirsin.")
-            except Exception as e:
-                st.error("Kaydedilirken hata oluştu.")
-        else:
-            st.warning("Lütfen Tarih, Başlık ve Detay kısımlarını boş bırakma.")
+                st.success("Anı başarıyla eklendi!")
+                st.rerun()
+            else:
+                st.warning("Lütfen başlık ve detay alanlarını doldur.")
