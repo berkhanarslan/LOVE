@@ -144,9 +144,12 @@ try:
     last_note = supabase.table("ani_kavanozu").select("*").gte("created_at", son_24_saat).order("created_at", desc=True).limit(1).execute()
     if last_note.data:
         note = last_note.data[0]
+        # ŞİİR FORMATI: Satır atlamalarını HTML <br> etiketine çeviriyoruz
+        formatli_metin = note['metin'].replace('\n', '<br>')
+        
         st.markdown(f"""
             <div class='quote-card' style='text-align: center; padding: 30px;'>
-                <h2 style='font-style: italic;'>"{note['metin']}"</h2>
+                <h2 style='font-style: italic;'>"{formatli_metin}"</h2>
                 <p style='text-align: right; margin-top: 10px; font-weight: bold;'>— {note['yazar']}</p>
             </div>
         """, unsafe_allow_html=True)
@@ -184,7 +187,6 @@ with tab1:
             with col_media:
                 medya_url = m.get('gorsel_linki')
                 if medya_url:
-                    # Gelen link bir video formatındaysa oynatıcı göster, değilse resim göster
                     if medya_url.lower().endswith(('.mp4', '.mov', '.avi')):
                         st.video(medya_url)
                     else:
@@ -243,9 +245,12 @@ with tab2:
             st.info("Kavanoz şu an boş. İlk notu sen bırak! 🤍")
         else:
             for n in all_notes.data:
+                # ŞİİR FORMATI: Alt alta yazılan yazıları korur
+                formatli_not = n['metin'].replace('\n', '<br>')
+                
                 st.markdown(f"""
                     <div class='note-card'>
-                        <strong>{n['yazar']}:</strong> <span>{n['metin']}</span>
+                        <strong>{n['yazar']}:</strong> <span>{formatli_not}</span>
                     </div>
                 """, unsafe_allow_html=True)
     except Exception as e:
@@ -257,7 +262,6 @@ with tab3:
         tarih = st.date_input("Tarih", datetime.date.today())
         baslik = st.text_input("Başlık", placeholder="O günün adı...")
         detay = st.text_area("Detay", placeholder="Kısaca o günü anlat...")
-        # type parametresine mp4 ve mov uzantılarını da ekledik
         yuklenen_medya = st.file_uploader("Fotoğraf veya Video Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg", "mp4", "mov"])
         
         submit = st.form_submit_button("Anıyı Kaydet")
