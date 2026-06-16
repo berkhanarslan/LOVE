@@ -52,11 +52,16 @@ st.markdown("""
     div[data-testid="stButton"] > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
         transform: translateY(-2px) !important; box-shadow: 0 6px 15px rgba(6, 190, 182, 0.5) !important;
     }
+    
+    /* İnce ayırıcı çizgi */
+    hr { border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(6, 190, 182, 0.2), rgba(0, 0, 0, 0)); margin: 30px 0; }
     </style>
 """, unsafe_allow_html=True)
 
-# 4. ŞİFRE KORUMASI
-if 'authenticated' not in st.session_state:
+# 4. ŞİFRE KORUMASI VE OTURUM HATIRLAMA
+if st.query_params.get("token") == "bizim_alanimiz_2306":
+    st.session_state['authenticated'] = True
+elif 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
 if not st.session_state['authenticated']:
@@ -67,6 +72,7 @@ if not st.session_state['authenticated']:
         if st.button("Giriş Yap"):
             if password == "2306":
                 st.session_state['authenticated'] = True
+                st.query_params["token"] = "bizim_alanimiz_2306"
                 st.rerun()
             else:
                 st.error("Hatalı şifre.")
@@ -86,9 +92,7 @@ def upload_image(file):
     return supabase.storage.from_("media").get_public_url(storage_path)
 
 def send_telegram_notification(yazar, metin):
-    """Eğer ayarlanmışsa Telegram'a bildirim atar."""
     try:
-        # st.secrets içinden bilgileri almayı dener. Yoksa sessizce geçer.
         bot_token = st.secrets.get("TELEGRAM_BOT_TOKEN")
         chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
         
@@ -97,15 +101,15 @@ def send_telegram_notification(yazar, metin):
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             requests.post(url, data={"chat_id": chat_id, "text": mesaj})
     except Exception:
-        pass # Hata verse de site çökmesin
+        pass 
 
 # --- ANA İÇERİK ---
 st.title("🤍 İlayda & Berkhan")
 
-# Son 24 Saati Hesaplama (UTC zaman diliminde)
+# Son 24 Saati Hesaplama
 son_24_saat = (datetime.datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
 
-# 5. GÜNÜN SÖZÜ (Sadece son 24 saat içindeyse gösterilir)
+# 5. GÜNÜN SÖZÜ
 try:
     last_note = supabase.table("ani_kavanozu").select("*").gte("created_at", son_24_saat).order("created_at", desc=True).limit(1).execute()
     if last_note.data:
@@ -138,6 +142,24 @@ with tab1:
             with col_img:
                 if m.get('gorsel_linki'):
                     st.image(m['gorsel_linki'], use_container_width=True)
+            
+            # --- YENİ EKLENEN FOTOĞRAF DEĞİŞTİRME BÖLÜMÜ ---
+            with st.expander("✏️ Fotoğrafı Değiştir", expanded=False):
+                # Her anı için benzersiz bir "key" oluşturuyoruz ki birbirine karışmasınlar
+                yeni_resim = st.file_uploader("Yeni bir kare seç", type=["jpg", "png", "jpeg"], key=f"up_{m['id']}")
+                if st.button("Güncelle", key=f"btn_{m['id']}"):
+                    if yeni_resim:
+                        with st.spinner("Fotoğraf güncelleniyor..."):
+                            yeni_url = upload_image(yeni_resim)
+                            # Sadece bu anının idsine sahip satırı bulup görsel linkini güncelliyoruz
+                            supabase.table("zaman_tuneli").update({"gorsel_linki": yeni_url}).eq("id", m['id']).execute()
+                        st.success("Fotoğraf başarıyla değiştirildi! ✨")
+                        st.rerun()
+                    else:
+                        st.warning("Lütfen yüklemek için bir fotoğraf seç.")
+            
+            st.markdown("<hr>", unsafe_allow_html=True) # Anılar arasına estetik bir çizgi koyar
+
     except Exception as e:
         st.error(f"Anılar yüklenirken bir sorun oluştu: {e}")
 
@@ -151,7 +173,6 @@ with tab2:
                 basarili = False
                 try:
                     supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
-                    # Bildirim Gönderme Fonksiyonunu Çağırıyoruz
                     send_telegram_notification(yazar, mesaj)
                     basarili = True
                 except Exception as e:
@@ -162,7 +183,6 @@ with tab2:
 
     st.write("")
     try:
-        # Sadece son 24 saate ait notları getirir (.gte filtresi eklendi)
         all_notes = supabase.table("ani_kavanozu").select("*").gte("created_at", son_24_saat).order("created_at", desc=True).execute()
         
         if len(all_notes.data) == 0:
