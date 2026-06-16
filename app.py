@@ -53,7 +53,6 @@ st.markdown("""
         transform: translateY(-2px) !important; box-shadow: 0 6px 15px rgba(6, 190, 182, 0.5) !important;
     }
     
-    /* İnce ayırıcı çizgi */
     hr { border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(6, 190, 182, 0.2), rgba(0, 0, 0, 0)); margin: 30px 0; }
     </style>
 """, unsafe_allow_html=True)
@@ -123,12 +122,27 @@ try:
 except:
     pass 
 
-tab1, tab2, tab3 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle"])
+tab1, tab2, tab3, tab4 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle", "🎵 Müzik"])
 
 # TAB 1: ZAMAN TÜNELİ
 with tab1:
+    # --- YENİ EKLENEN TARİHE GÖRE SIRALAMA BUTONLARI ---
+    st.write("")
+    siralama = st.radio(
+        "Sıralama Seçimi", 
+        ["🔽 En Yeniden En Eskiye", "🔼 En Eskiden En Yeniye"], 
+        horizontal=True, 
+        label_visibility="collapsed"
+    )
+    
+    # Seçime göre Supabase'e gönderilecek sıralama komutunu belirliyoruz
+    is_descending = True if "🔽" in siralama else False
+    st.write("")
+
     try:
-        memories = supabase.table("zaman_tuneli").select("*").order("tarih", desc=True).execute()
+        # 'tarih' sütununa (yaşandığı güne) göre sıralama yapılıyor, eklenme zamanına (created_at) göre DEĞİL.
+        memories = supabase.table("zaman_tuneli").select("*").order("tarih", desc=is_descending).execute()
+        
         for m in memories.data:
             col_text, col_img = st.columns([2, 1])
             with col_text:
@@ -143,7 +157,6 @@ with tab1:
                 if m.get('gorsel_linki'):
                     st.image(m['gorsel_linki'], use_container_width=True)
             
-            # --- FOTOĞRAF DEĞİŞTİRME BÖLÜMÜ ---
             with st.expander("✏️ Fotoğrafı Değiştir", expanded=False):
                 yeni_resim = st.file_uploader("Yeni bir kare seç", type=["jpg", "png", "jpeg"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
@@ -156,7 +169,6 @@ with tab1:
                     else:
                         st.warning("Lütfen yüklemek için bir fotoğraf seç.")
             
-            # --- YENİ EKLENEN ANI SİLME BÖLÜMÜ ---
             with st.expander("🗑️ Anıyı Sil", expanded=False):
                 st.warning("Bu anıyı tamamen silmek istediğine emin misin? Bu işlem geri alınamaz.")
                 if st.button("Evet, Anıyı Sil", key=f"del_{m['id']}"):
@@ -240,3 +252,18 @@ with tab3:
                     st.rerun()
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
+
+# TAB 4: MÜZİK 
+with tab4:
+    st.markdown("<h3 style='color: #48b1bf; text-align: center;'>🎧 Bizim Şarkılarımız</h3>", unsafe_allow_html=True)
+    st.write("Bu listede çalan her şarkı bizim bir anımıza eşlik ediyor...")
+    st.write("")
+    
+    spotify_html = """
+    <iframe style="border-radius:12px" 
+    src="https://open.spotify.com/embed/playlist/2XPYlaYVuR34GWeMrkm9oy?utm_source=generator" 
+    width="100%" height="450" frameBorder="0" allowfullscreen="" 
+    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+    loading="lazy"></iframe>
+    """
+    st.markdown(spotify_html, unsafe_allow_html=True)
