@@ -123,7 +123,7 @@ try:
 except:
     pass 
 
-tab1, tab2, tab3 = st.tabs(["⏳ Anılar", "💌 Notlar", "📸 Yeni Ekle"])
+tab1, tab2, tab3 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle"])
 
 # TAB 1: ZAMAN TÜNELİ
 with tab1:
@@ -143,22 +143,31 @@ with tab1:
                 if m.get('gorsel_linki'):
                     st.image(m['gorsel_linki'], use_container_width=True)
             
-            # --- YENİ EKLENEN FOTOĞRAF DEĞİŞTİRME BÖLÜMÜ ---
+            # --- FOTOĞRAF DEĞİŞTİRME BÖLÜMÜ ---
             with st.expander("✏️ Fotoğrafı Değiştir", expanded=False):
-                # Her anı için benzersiz bir "key" oluşturuyoruz ki birbirine karışmasınlar
                 yeni_resim = st.file_uploader("Yeni bir kare seç", type=["jpg", "png", "jpeg"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
                     if yeni_resim:
                         with st.spinner("Fotoğraf güncelleniyor..."):
                             yeni_url = upload_image(yeni_resim)
-                            # Sadece bu anının idsine sahip satırı bulup görsel linkini güncelliyoruz
                             supabase.table("zaman_tuneli").update({"gorsel_linki": yeni_url}).eq("id", m['id']).execute()
                         st.success("Fotoğraf başarıyla değiştirildi! ✨")
                         st.rerun()
                     else:
                         st.warning("Lütfen yüklemek için bir fotoğraf seç.")
             
-            st.markdown("<hr>", unsafe_allow_html=True) # Anılar arasına estetik bir çizgi koyar
+            # --- YENİ EKLENEN ANI SİLME BÖLÜMÜ ---
+            with st.expander("🗑️ Anıyı Sil", expanded=False):
+                st.warning("Bu anıyı tamamen silmek istediğine emin misin? Bu işlem geri alınamaz.")
+                if st.button("Evet, Anıyı Sil", key=f"del_{m['id']}"):
+                    try:
+                        supabase.table("zaman_tuneli").delete().eq("id", m['id']).execute()
+                        st.success("Anı başarıyla silindi!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Silinirken bir hata oluştu: {e}")
+            
+            st.markdown("<hr>", unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Anılar yüklenirken bir sorun oluştu: {e}")
