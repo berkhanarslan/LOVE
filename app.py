@@ -4,6 +4,8 @@ from datetime import timedelta, timezone
 from supabase import create_client, Client
 import uuid
 import requests
+from PIL import Image
+import io
 
 # 1. SAYFA YAPILANDIRMASI
 st.set_page_config(
@@ -79,14 +81,35 @@ if not st.session_state['authenticated']:
 
 # --- YARDIMCI FONKSİYONLAR ---
 def upload_image(file):
-    file_extension = file.name.split(".")[-1]
-    file_name = f"{uuid.uuid4()}.{file_extension}"
+    """Pillow ile fotoğrafı sıkıştırır ve Supabase'e yükler."""
+    # Fotoğrafı bellekte açıyoruz
+    image = Image.open(file)
+    
+    # Eğer fotoğraf PNG veya şeffaf arkaplanlı ise JPEG formatı için RGB'ye çeviriyoruz
+    if image.mode in ("RGBA", "P"):
+        image = image.convert("RGB")
+        
+    # Fotoğraf çok büyükse genişliği maksimum 1080px olacak şekilde küçültüyoruz
+    max_width = 1080
+    if image.width > max_width:
+        oran = max_width / float(image.width)
+        yeni_boyut = (max_width, int(float(image.height) * float(oran)))
+        image = image.resize(yeni_boyut, Image.Resampling.LANCZOS)
+    
+    # Sıkıştırılmış halini geçici belleğe (BytesIO) kaydediyoruz
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+    img_byte_arr = img_byte_arr.getvalue()
+
+    # Supabase için yeni isim oluşturma (Tüm resimler .jpg olarak kaydedilir)
+    file_name = f"{uuid.uuid4()}.jpg"
     storage_path = f"photos/{file_name}"
     
+    # Sıkıştırılmış veriyi yüklüyoruz
     supabase.storage.from_("media").upload(
         path=storage_path, 
-        file=file.getvalue(), 
-        file_options={"content-type": file.type}
+        file=img_byte_arr, 
+        file_options={"content-type": "image/jpeg"}
     )
     return supabase.storage.from_("media").get_public_url(storage_path)
 
@@ -126,7 +149,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["⏳ Anılar", "🍯 Notlar", "📸 Yeni Ekle"
 
 # TAB 1: ZAMAN TÜNELİ
 with tab1:
-    # --- YENİ EKLENEN TARİHE GÖRE SIRALAMA BUTONLARI ---
     st.write("")
     siralama = st.radio(
         "Sıralama Seçimi", 
@@ -135,12 +157,10 @@ with tab1:
         label_visibility="collapsed"
     )
     
-    # Seçime göre Supabase'e gönderilecek sıralama komutunu belirliyoruz
     is_descending = True if "🔽" in siralama else False
     st.write("")
 
     try:
-        # 'tarih' sütununa (yaşandığı güne) göre sıralama yapılıyor, eklenme zamanına (created_at) göre DEĞİL.
         memories = supabase.table("zaman_tuneli").select("*").order("tarih", desc=is_descending).execute()
         
         for m in memories.data:
@@ -161,7 +181,7 @@ with tab1:
                 yeni_resim = st.file_uploader("Yeni bir kare seç", type=["jpg", "png", "jpeg"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
                     if yeni_resim:
-                        with st.spinner("Fotoğraf güncelleniyor..."):
+                        with st.spinner("Fotoğraf optimize ediliyor ve güncelleniyor..."):
                             yeni_url = upload_image(yeni_resim)
                             supabase.table("zaman_tuneli").update({"gorsel_linki": yeni_url}).eq("id", m['id']).execute()
                         st.success("Fotoğraf başarıyla değiştirildi! ✨")
@@ -234,7 +254,7 @@ with tab3:
                 resim_url = ""
                 try:
                     if yuklenen_resim:
-                        with st.spinner("Fotoğraf Yükleniyor..."):
+                        with st.spinner("Fotoğraf optimize ediliyor ve yükleniyor..."):
                             resim_url = upload_image(yuklenen_resim)
                     
                     supabase.table("zaman_tuneli").insert({
@@ -253,7 +273,7 @@ with tab3:
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
 
-# TAB 4: MÜZİK 
+# TAB 4: MÜZİK
 with tab4:
     st.markdown("<h3 style='color: #48b1bf; text-align: center;'>🎧 Bizim Şarkılarımız</h3>", unsafe_allow_html=True)
     st.write("Bu listede çalan her şarkı bizim bir anımıza eşlik ediyor...")
