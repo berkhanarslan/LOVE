@@ -80,38 +80,46 @@ if not st.session_state['authenticated']:
     st.stop()
 
 # --- YARDIMCI FONKSİYONLAR ---
-def upload_image(file):
-    """Pillow ile fotoğrafı sıkıştırır ve Supabase'e yükler."""
-    # Fotoğrafı bellekte açıyoruz
-    image = Image.open(file)
+def upload_media(file):
+    """Dosyanın türünü algılar; fotoğrafsa sıkıştırır, videoyasa doğrudan yükler."""
+    file_extension = file.name.split(".")[-1].lower()
     
-    # Eğer fotoğraf PNG veya şeffaf arkaplanlı ise JPEG formatı için RGB'ye çeviriyoruz
-    if image.mode in ("RGBA", "P"):
-        image = image.convert("RGB")
+    # EĞER VİDEO İSE DOĞRUDAN YÜKLE
+    if file_extension in ['mp4', 'mov', 'avi']:
+        file_name = f"{uuid.uuid4()}.{file_extension}"
+        storage_path = f"photos/{file_name}"
+        supabase.storage.from_("media").upload(
+            path=storage_path, 
+            file=file.getvalue(), 
+            file_options={"content-type": file.type}
+        )
+        return supabase.storage.from_("media").get_public_url(storage_path)
         
-    # Fotoğraf çok büyükse genişliği maksimum 1080px olacak şekilde küçültüyoruz
-    max_width = 1080
-    if image.width > max_width:
-        oran = max_width / float(image.width)
-        yeni_boyut = (max_width, int(float(image.height) * float(oran)))
-        image = image.resize(yeni_boyut, Image.Resampling.LANCZOS)
-    
-    # Sıkıştırılmış halini geçici belleğe (BytesIO) kaydediyoruz
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
-    img_byte_arr = img_byte_arr.getvalue()
+    # EĞER FOTOĞRAF İSE PİLLOW İLE OPTİMİZE ET
+    else:
+        image = Image.open(file)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+            
+        max_width = 1080
+        if image.width > max_width:
+            oran = max_width / float(image.width)
+            yeni_boyut = (max_width, int(float(image.height) * float(oran)))
+            image = image.resize(yeni_boyut, Image.Resampling.LANCZOS)
+        
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+        img_byte_arr = img_byte_arr.getvalue()
 
-    # Supabase için yeni isim oluşturma (Tüm resimler .jpg olarak kaydedilir)
-    file_name = f"{uuid.uuid4()}.jpg"
-    storage_path = f"photos/{file_name}"
-    
-    # Sıkıştırılmış veriyi yüklüyoruz
-    supabase.storage.from_("media").upload(
-        path=storage_path, 
-        file=img_byte_arr, 
-        file_options={"content-type": "image/jpeg"}
-    )
-    return supabase.storage.from_("media").get_public_url(storage_path)
+        file_name = f"{uuid.uuid4()}.jpg"
+        storage_path = f"photos/{file_name}"
+        
+        supabase.storage.from_("media").upload(
+            path=storage_path, 
+            file=img_byte_arr, 
+            file_options={"content-type": "image/jpeg"}
+        )
+        return supabase.storage.from_("media").get_public_url(storage_path)
 
 def send_telegram_notification(yazar, metin):
     try:
@@ -164,7 +172,7 @@ with tab1:
         memories = supabase.table("zaman_tuneli").select("*").order("tarih", desc=is_descending).execute()
         
         for m in memories.data:
-            col_text, col_img = st.columns([2, 1])
+            col_text, col_media = st.columns([2, 1])
             with col_text:
                 st.markdown(f"""
                     <div class='timeline-card'>
@@ -173,21 +181,26 @@ with tab1:
                         <p>{m['detay']}</p>
                     </div>
                 """, unsafe_allow_html=True)
-            with col_img:
-                if m.get('gorsel_linki'):
-                    st.image(m['gorsel_linki'], use_container_width=True)
+            with col_media:
+                medya_url = m.get('gorsel_linki')
+                if medya_url:
+                    # Gelen link bir video formatındaysa oynatıcı göster, değilse resim göster
+                    if medya_url.lower().endswith(('.mp4', '.mov', '.avi')):
+                        st.video(medya_url)
+                    else:
+                        st.image(medya_url, use_container_width=True)
             
-            with st.expander("✏️ Fotoğrafı Değiştir", expanded=False):
-                yeni_resim = st.file_uploader("Yeni bir kare seç", type=["jpg", "png", "jpeg"], key=f"up_{m['id']}")
+            with st.expander("✏️ Fotoğraf/Video Değiştir", expanded=False):
+                yeni_medya = st.file_uploader("Yeni bir kare/video seç", type=["jpg", "png", "jpeg", "mp4", "mov"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
-                    if yeni_resim:
-                        with st.spinner("Fotoğraf optimize ediliyor ve güncelleniyor..."):
-                            yeni_url = upload_image(yeni_resim)
+                    if yeni_medya:
+                        with st.spinner("Medya yükleniyor..."):
+                            yeni_url = upload_media(yeni_medya)
                             supabase.table("zaman_tuneli").update({"gorsel_linki": yeni_url}).eq("id", m['id']).execute()
-                        st.success("Fotoğraf başarıyla değiştirildi! ✨")
+                        st.success("İçerik başarıyla değiştirildi! ✨")
                         st.rerun()
                     else:
-                        st.warning("Lütfen yüklemek için bir fotoğraf seç.")
+                        st.warning("Lütfen yüklemek için bir dosya seç.")
             
             with st.expander("🗑️ Anıyı Sil", expanded=False):
                 st.warning("Bu anıyı tamamen silmek istediğine emin misin? Bu işlem geri alınamaz.")
@@ -244,7 +257,8 @@ with tab3:
         tarih = st.date_input("Tarih", datetime.date.today())
         baslik = st.text_input("Başlık", placeholder="O günün adı...")
         detay = st.text_area("Detay", placeholder="Kısaca o günü anlat...")
-        yuklenen_resim = st.file_uploader("Fotoğraf Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg"])
+        # type parametresine mp4 ve mov uzantılarını da ekledik
+        yuklenen_medya = st.file_uploader("Fotoğraf veya Video Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg", "mp4", "mov"])
         
         submit = st.form_submit_button("Anıyı Kaydet")
         
@@ -253,9 +267,9 @@ with tab3:
                 basarili = False
                 resim_url = ""
                 try:
-                    if yuklenen_resim:
-                        with st.spinner("Fotoğraf optimize ediliyor ve yükleniyor..."):
-                            resim_url = upload_image(yuklenen_resim)
+                    if yuklenen_medya:
+                        with st.spinner("İçerik işleniyor ve yükleniyor..."):
+                            resim_url = upload_media(yuklenen_medya)
                     
                     supabase.table("zaman_tuneli").insert({
                         "tarih": str(tarih),
