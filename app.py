@@ -4,7 +4,7 @@ from datetime import timedelta, timezone
 from supabase import create_client, Client
 import uuid
 import requests
-from PIL import Image
+from PIL import Image, ImageOps  # YENİ: ImageOps eklendi
 import io
 
 # 1. SAYFA YAPILANDIRMASI
@@ -81,7 +81,7 @@ if not st.session_state['authenticated']:
 
 # --- YARDIMCI FONKSİYONLAR ---
 def upload_media(file):
-    """Dosyanın türünü algılar; fotoğrafsa sıkıştırır, videoyasa doğrudan yükler."""
+    """Dosyanın türünü algılar; fotoğrafsa sıkıştırır ve düzeltir, videoyasa doğrudan yükler."""
     file_extension = file.name.split(".")[-1].lower()
     
     # EĞER VİDEO İSE DOĞRUDAN YÜKLE
@@ -98,6 +98,10 @@ def upload_media(file):
     # EĞER FOTOĞRAF İSE PİLLOW İLE OPTİMİZE ET
     else:
         image = Image.open(file)
+        
+        # YENİ: Telefondan gelen fotoğrafların yönünü (EXIF) düzeltir
+        image = ImageOps.exif_transpose(image)
+        
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
             
@@ -258,6 +262,8 @@ with tab2:
 
 # TAB 3: YENİ ANI EKLE
 with tab3:
+    st.info("💡 **İpucu:** Telefondan yüklüyorsanız, fotoğrafı o an çekmek (Kamera) yerine **'Fotoğraf Arşivi'nden (Galeriden)** seçmeniz, bağlantının kopmasını engelleyecek ve çok daha sağlıklı yüklenecektir.")
+    
     with st.form("yeni_ani_formu", clear_on_submit=True):
         tarih = st.date_input("Tarih", datetime.date.today())
         baslik = st.text_input("Başlık", placeholder="O günün adı...")
@@ -272,7 +278,7 @@ with tab3:
                 resim_url = ""
                 try:
                     if yuklenen_medya:
-                        with st.spinner("İçerik işleniyor ve yükleniyor..."):
+                        with st.spinner("İçerik işleniyor ve yükleniyor... (Lütfen bitene kadar bekleyin)"):
                             resim_url = upload_media(yuklenen_medya)
                     
                     supabase.table("zaman_tuneli").insert({
@@ -287,6 +293,7 @@ with tab3:
                 
                 if basarili:
                     st.success("Anı başarıyla kaydedildi! ✨")
+                    time.sleep(1)
                     st.rerun()
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
