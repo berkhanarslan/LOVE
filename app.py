@@ -4,8 +4,15 @@ from datetime import timedelta, timezone
 from supabase import create_client, Client
 import uuid
 import requests
-from PIL import Image, ImageOps  # YENİ: ImageOps eklendi
+from PIL import Image, ImageOps
 import io
+
+# HEIC (iPhone) Format desteği için eklenti
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
 
 # 1. SAYFA YAPILANDIRMASI
 st.set_page_config(
@@ -97,33 +104,43 @@ def upload_media(file):
         
     # EĞER FOTOĞRAF İSE PİLLOW İLE OPTİMİZE ET
     else:
-        image = Image.open(file)
-        
-        # YENİ: Telefondan gelen fotoğrafların yönünü (EXIF) düzeltir
-        image = ImageOps.exif_transpose(image)
-        
-        if image.mode in ("RGBA", "P"):
-            image = image.convert("RGB")
+        try:
+            image = Image.open(file)
+            image = ImageOps.exif_transpose(image) # YENİ: Telefondaki ters dönme sorununu çözer
             
-        max_width = 1080
-        if image.width > max_width:
-            oran = max_width / float(image.width)
-            yeni_boyut = (max_width, int(float(image.height) * float(oran)))
-            image = image.resize(yeni_boyut, Image.Resampling.LANCZOS)
-        
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
-        img_byte_arr = img_byte_arr.getvalue()
+            if image.mode in ("RGBA", "P"):
+                image = image.convert("RGB")
+                
+            max_width = 1080
+            if image.width > max_width:
+                oran = max_width / float(image.width)
+                yeni_boyut = (max_width, int(float(image.height) * float(oran)))
+                image = image.resize(yeni_boyut, Image.Resampling.LANCZOS)
+            
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+            img_byte_arr = img_byte_arr.getvalue()
 
-        file_name = f"{uuid.uuid4()}.jpg"
-        storage_path = f"photos/{file_name}"
-        
-        supabase.storage.from_("media").upload(
-            path=storage_path, 
-            file=img_byte_arr, 
-            file_options={"content-type": "image/jpeg"}
-        )
-        return supabase.storage.from_("media").get_public_url(storage_path)
+            file_name = f"{uuid.uuid4()}.jpg"
+            storage_path = f"photos/{file_name}"
+            
+            supabase.storage.from_("media").upload(
+                path=storage_path, 
+                file=img_byte_arr, 
+                file_options={"content-type": "image/jpeg"}
+            )
+            return supabase.storage.from_("media").get_public_url(storage_path)
+            
+        except Exception as e:
+            # Eğer Pillow fotoğraf formatını hiç tanıyamazsa (kütüphane eksikse) hata vermek yerine dosyayı ham haliyle yükler.
+            file_name = f"{uuid.uuid4()}.{file_extension}"
+            storage_path = f"photos/{file_name}"
+            supabase.storage.from_("media").upload(
+                path=storage_path, 
+                file=file.getvalue(), 
+                file_options={"content-type": file.type}
+            )
+            return supabase.storage.from_("media").get_public_url(storage_path)
 
 def send_telegram_notification(yazar, metin):
     try:
@@ -197,7 +214,8 @@ with tab1:
                         st.image(medya_url, use_container_width=True)
             
             with st.expander("✏️ Fotoğraf/Video Değiştir", expanded=False):
-                yeni_medya = st.file_uploader("Yeni bir kare/video seç", type=["jpg", "png", "jpeg", "mp4", "mov"], key=f"up_{m['id']}")
+                # YENİ: heic, heif, webp eklendi
+                yeni_medya = st.file_uploader("Yeni bir kare/video seç", type=["jpg", "png", "jpeg", "heic", "heif", "webp", "mp4", "mov"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
                     if yeni_medya:
                         with st.spinner("Medya yükleniyor..."):
@@ -262,13 +280,12 @@ with tab2:
 
 # TAB 3: YENİ ANI EKLE
 with tab3:
-    st.info("💡 **İpucu:** Telefondan yüklüyorsanız, fotoğrafı o an çekmek (Kamera) yerine **'Fotoğraf Arşivi'nden (Galeriden)** seçmeniz, bağlantının kopmasını engelleyecek ve çok daha sağlıklı yüklenecektir.")
-    
     with st.form("yeni_ani_formu", clear_on_submit=True):
         tarih = st.date_input("Tarih", datetime.date.today())
         baslik = st.text_input("Başlık", placeholder="O günün adı...")
         detay = st.text_area("Detay", placeholder="Kısaca o günü anlat...")
-        yuklenen_medya = st.file_uploader("Fotoğraf veya Video Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg", "mp4", "mov"])
+        # YENİ: heic, heif, webp eklendi
+        yuklenen_medya = st.file_uploader("Fotoğraf veya Video Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg", "heic", "heif", "webp", "mp4", "mov"])
         
         submit = st.form_submit_button("Anıyı Kaydet")
         
@@ -278,7 +295,7 @@ with tab3:
                 resim_url = ""
                 try:
                     if yuklenen_medya:
-                        with st.spinner("İçerik işleniyor ve yükleniyor... (Lütfen bitene kadar bekleyin)"):
+                        with st.spinner("İçerik işleniyor ve yükleniyor..."):
                             resim_url = upload_media(yuklenen_medya)
                     
                     supabase.table("zaman_tuneli").insert({
@@ -293,7 +310,6 @@ with tab3:
                 
                 if basarili:
                     st.success("Anı başarıyla kaydedildi! ✨")
-                    time.sleep(1)
                     st.rerun()
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
