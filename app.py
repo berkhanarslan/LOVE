@@ -6,6 +6,10 @@ import uuid
 import requests
 from PIL import Image, ImageOps
 import io
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import threading
 
 # HEIC (iPhone) Format desteği için eklenti
 try:
@@ -132,7 +136,6 @@ def upload_media(file):
             return supabase.storage.from_("media").get_public_url(storage_path)
             
         except Exception as e:
-            # Eğer Pillow fotoğraf formatını hiç tanıyamazsa (kütüphane eksikse) hata vermek yerine dosyayı ham haliyle yükler.
             file_name = f"{uuid.uuid4()}.{file_extension}"
             storage_path = f"photos/{file_name}"
             supabase.storage.from_("media").upload(
@@ -142,17 +145,45 @@ def upload_media(file):
             )
             return supabase.storage.from_("media").get_public_url(storage_path)
 
-def send_telegram_notification(yazar, metin):
+
+# YENİ: ÇİFT TARAFLI MAİL BİLDİRİM SİSTEMİ
+def send_couple_email(yazar, metin):
     try:
-        bot_token = st.secrets.get("TELEGRAM_BOT_TOKEN")
-        chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
+        # Kimin kime göndereceğini belirliyoruz
+        if yazar == "İlayda":
+            gonderen_email = st.secrets.get("ILAYDA_EMAIL")
+            gonderen_sifre = st.secrets.get("ILAYDA_PASS")
+            alici_email = st.secrets.get("BERKHAN_EMAIL")
+        else:
+            gonderen_email = st.secrets.get("BERKHAN_EMAIL")
+            gonderen_sifre = st.secrets.get("BERKHAN_PASS")
+            alici_email = st.secrets.get("ILAYDA_EMAIL")
+
+        # Eğer secrets ayarlanmamışsa işlemi sessizce iptal et (çökmeyi engeller)
+        if not gonderen_email or not gonderen_sifre or not alici_email:
+            return
+
+        msg = MIMEMultipart()
+        msg['From'] = f"{yazar} <{gonderen_email}>"
+        msg['To'] = alici_email
+        msg['Subject'] = f"🤍 Kavanozda senden bir mesaj var!"
         
-        if bot_token and chat_id:
-            mesaj = f"💌 {yazar} kavanoza yeni bir not bıraktı:\n\n{metin}"
-            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            requests.post(url, data={"chat_id": chat_id, "text": mesaj})
-    except Exception:
-        pass 
+        body = f"Sevgilim,\n\nSana kavanozumuzda yeni bir not bıraktım:\n\n\"{metin}\"\n\nSeni seviyorum,\n{yazar}"
+        
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(gonderen_email, gonderen_sifre)
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        print(f"Mail Hatası: {e}")
+
+# Uygulama donmasın diye maili arka planda gönderen fonksiyon
+def trigger_couple_email_bg(yazar, metin):
+    threading.Thread(target=send_couple_email, args=(yazar, metin)).start()
+
 
 # --- ANA İÇERİK ---
 st.title("🤍 İlayda & Berkhan")
@@ -214,7 +245,6 @@ with tab1:
                         st.image(medya_url, use_container_width=True)
             
             with st.expander("✏️ Fotoğraf/Video Değiştir", expanded=False):
-                # YENİ: heic, heif, webp eklendi
                 yeni_medya = st.file_uploader("Yeni bir kare/video seç", type=["jpg", "png", "jpeg", "heic", "heif", "webp", "mp4", "mov"], key=f"up_{m['id']}")
                 if st.button("Güncelle", key=f"btn_{m['id']}"):
                     if yeni_medya:
@@ -251,7 +281,10 @@ with tab2:
                 basarili = False
                 try:
                     supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
-                    send_telegram_notification(yazar, mesaj)
+                    
+                    # YENİ: Telegram yerine direkt mail gönderimi tetikleniyor
+                    trigger_couple_email_bg(yazar, mesaj)
+                    
                     basarili = True
                 except Exception as e:
                     st.error(f"Veritabanı hatası detayı: {e}")
@@ -280,11 +313,12 @@ with tab2:
 
 # TAB 3: YENİ ANI EKLE
 with tab3:
+    st.info("💡 **İpucu:** Telefondan yüklüyorsanız, fotoğrafı o an çekmek (Kamera) yerine **'Fotoğraf Arşivi'nden (Galeriden)** seçmeniz, bağlantının kopmasını engelleyecek ve çok daha sağlıklı yüklenecektir.")
+    
     with st.form("yeni_ani_formu", clear_on_submit=True):
         tarih = st.date_input("Tarih", datetime.date.today())
         baslik = st.text_input("Başlık", placeholder="O günün adı...")
         detay = st.text_area("Detay", placeholder="Kısaca o günü anlat...")
-        # YENİ: heic, heif, webp eklendi
         yuklenen_medya = st.file_uploader("Fotoğraf veya Video Ekle (İsteğe bağlı)", type=["jpg", "png", "jpeg", "heic", "heif", "webp", "mp4", "mov"])
         
         submit = st.form_submit_button("Anıyı Kaydet")
@@ -295,7 +329,7 @@ with tab3:
                 resim_url = ""
                 try:
                     if yuklenen_medya:
-                        with st.spinner("İçerik işleniyor ve yükleniyor..."):
+                        with st.spinner("İçerik işleniyor ve yükleniyor... (Lütfen bitene kadar bekleyin)"):
                             resim_url = upload_media(yuklenen_medya)
                     
                     supabase.table("zaman_tuneli").insert({
@@ -310,6 +344,7 @@ with tab3:
                 
                 if basarili:
                     st.success("Anı başarıyla kaydedildi! ✨")
+                    time.sleep(1)
                     st.rerun()
             else:
                 st.warning("Lütfen başlık ve detay alanlarını doldurunuz.")
