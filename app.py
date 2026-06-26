@@ -166,9 +166,9 @@ def send_couple_email(yazar, metin):
         msg = MIMEMultipart()
         msg['From'] = f"{yazar} <{gonderen_email}>"
         msg['To'] = alici_email
-        msg['Subject'] = f"🤍 Kavanozda senden bir mesaj var!"
+        msg['Subject'] = f"🤍 Kavanozda senin için bir mesaj var!"
         
-        body = f"Sevgilim,\n\nSana kavanozumuzda yeni bir not bıraktım:\n\n\"{metin}\"\n\nSeni seviyorum,\n{yazar}"
+        body = f"Sevgilim,\n\nSana sevgi kavanozumuzda yeni bir not bıraktım:\n\n\"{metin}\"\n\nSeni çuk seviyorumm,\n{yazar}"
         
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         
