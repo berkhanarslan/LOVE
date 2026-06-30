@@ -10,6 +10,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import threading
+import time
 
 # HEIC (iPhone) Format desteği için eklenti
 try:
@@ -110,7 +111,7 @@ def upload_media(file):
     else:
         try:
             image = Image.open(file)
-            image = ImageOps.exif_transpose(image) # YENİ: Telefondaki ters dönme sorununu çözer
+            image = ImageOps.exif_transpose(image) # Telefondaki ters dönme sorununu çözer
             
             if image.mode in ("RGBA", "P"):
                 image = image.convert("RGB")
@@ -145,11 +146,9 @@ def upload_media(file):
             )
             return supabase.storage.from_("media").get_public_url(storage_path)
 
-
-# YENİ: ÇİFT TARAFLI MAİL BİLDİRİM SİSTEMİ
+# ÇİFT TARAFLI MAİL BİLDİRİM SİSTEMİ (KAVANOZ NOTLARI İÇİN)
 def send_couple_email(yazar, metin):
     try:
-        # Kimin kime göndereceğini belirliyoruz
         if yazar == "İlayda":
             gonderen_email = st.secrets.get("ILAYDA_EMAIL")
             gonderen_sifre = st.secrets.get("ILAYDA_PASS")
@@ -159,16 +158,15 @@ def send_couple_email(yazar, metin):
             gonderen_sifre = st.secrets.get("BERKHAN_PASS")
             alici_email = st.secrets.get("ILAYDA_EMAIL")
 
-        # Eğer secrets ayarlanmamışsa işlemi sessizce iptal et (çökmeyi engeller)
         if not gonderen_email or not gonderen_sifre or not alici_email:
             return
 
         msg = MIMEMultipart()
         msg['From'] = f"{yazar} <{gonderen_email}>"
         msg['To'] = alici_email
-        msg['Subject'] = f"🤍 Kavanozda senin için bir mesaj var!"
+        msg['Subject'] = f"🤍 Kavanozda senden bir mesaj var!"
         
-        body = f"Sevgilim,\n\nSana sevgi kavanozumuzda yeni bir not bıraktım:\n\n\"{metin}\"\n\nSeni çuk seviyorumm,\n{yazar}"
+        body = f"Sevgilim,\n\nSana kavanozumuzda yeni bir not bıraktım:\n\n\"{metin}\"\n\nSeni seviyorum,\n{yazar}"
         
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         
@@ -180,20 +178,52 @@ def send_couple_email(yazar, metin):
     except Exception as e:
         print(f"Mail Hatası: {e}")
 
-# Uygulama donmasın diye maili arka planda gönderen fonksiyon
 def trigger_couple_email_bg(yazar, metin):
     threading.Thread(target=send_couple_email, args=(yazar, metin)).start()
+
+
+# YENİ: ANI EKLENDİĞİNDE İKİNİZE BİRDEN MAİL ATACAK FONKSİYON
+def send_memory_email(baslik, detay, tarih):
+    try:
+        # Sistemden mail atabilmek için bir gönderici seçiyoruz (Berkhan)
+        gonderen_email = st.secrets.get("BERKHAN_EMAIL")
+        gonderen_sifre = st.secrets.get("BERKHAN_PASS")
+        
+        alici_ilayda = st.secrets.get("ILAYDA_EMAIL")
+        alici_berkhan = st.secrets.get("BERKHAN_EMAIL")
+
+        # Eğer sırlar (secrets) yoksa işlem yapma
+        if not gonderen_email or not gonderen_sifre or not alici_ilayda or not alici_berkhan:
+            return
+
+        for alici in [alici_ilayda, alici_berkhan]:
+            msg = MIMEMultipart()
+            msg['From'] = f"Bizim Alanımız <{gonderen_email}>"
+            msg['To'] = alici
+            msg['Subject'] = f"📸 Zaman Tüneline Yeni Bir Anı Eklendi!"
+            
+            body = f"Zaman tünelimize yepyeni bir anı kaydedildi!\n\n📅 Tarih: {tarih}\n📌 Başlık: {baslik}\n💭 Detay: {detay}\n\nHemen uygulamaya girip anılarımıza göz atabilirsin! 🤍"
+            
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.starttls()
+            server.login(gonderen_email, gonderen_sifre)
+            server.send_message(msg)
+            server.quit()
+    except Exception as e:
+        print(f"Mail Hatası: {e}")
+
+def trigger_memory_email_bg(baslik, detay, tarih):
+    threading.Thread(target=send_memory_email, args=(baslik, detay, tarih)).start()
 
 
 # --- ANA İÇERİK ---
 st.title("🤍 İlayda & Berkhan")
 
-# Son 24 Saati Hesaplama
-son_24_saat = (datetime.datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-
-# 5. GÜNÜN SÖZÜ
+# 5. GÜNÜN SÖZÜ (Artık 24 saat sınırı yok, en son eklenen not görünecek)
 try:
-    last_note = supabase.table("ani_kavanozu").select("*").gte("created_at", son_24_saat).order("created_at", desc=True).limit(1).execute()
+    last_note = supabase.table("ani_kavanozu").select("*").order("created_at", desc=True).limit(1).execute()
     if last_note.data:
         note = last_note.data[0]
         # ŞİİR FORMATI: Satır atlamalarını HTML <br> etiketine çeviriyoruz
@@ -282,7 +312,7 @@ with tab2:
                 try:
                     supabase.table("ani_kavanozu").insert({"yazar": yazar, "metin": mesaj}).execute()
                     
-                    # YENİ: Telegram yerine direkt mail gönderimi tetikleniyor
+                    # Mail gönderimi tetikleniyor
                     trigger_couple_email_bg(yazar, mesaj)
                     
                     basarili = True
@@ -294,7 +324,8 @@ with tab2:
 
     st.write("")
     try:
-        all_notes = supabase.table("ani_kavanozu").select("*").gte("created_at", son_24_saat).order("created_at", desc=True).execute()
+        # Zaman kısıtlaması kaldırıldı, artık tüm notlar listelenecek
+        all_notes = supabase.table("ani_kavanozu").select("*").order("created_at", desc=True).execute()
         
         if len(all_notes.data) == 0:
             st.info("Kavanoz şu an boş. İlk notu sen bırak! 🤍")
@@ -343,6 +374,9 @@ with tab3:
                     st.error(f"Kaydedilirken hata oluştu detayı: {e}")
                 
                 if basarili:
+                    # YENİ: Anı eklendiğinde ikinize birden mail gönderilir
+                    trigger_memory_email_bg(baslik, detay, str(tarih))
+                    
                     st.success("Anı başarıyla kaydedildi! ✨")
                     time.sleep(1)
                     st.rerun()
